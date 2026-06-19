@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nova 角色卡工作室 · 一键生成 SillyTavern 角色卡</title>
+<style>
+  :root {
+    --bg: #fdf6fb; --bg2: #fff;
+    --panel: #ffffff; --panel2: #fbeef6; --border: #f3d9ea;
+    --text: #4a3a44; --muted: #b08aa0; --accent: #ff8fc7; --accent2: #b39bff;
+    --ai: #b39bff; --ok: #54c79b; --warn: #ffb454; --err: #ff7a8a;
+    --shadow: 0 8px 24px rgba(255,143,199,.18);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--text); height: 100vh; overflow: hidden;
+    background:
+      radial-gradient(circle at 12% 18%, rgba(179,155,255,.16), transparent 42%),
+      radial-gradient(circle at 88% 12%, rgba(255,143,199,.18), transparent 40%),
+      radial-gradient(circle at 78% 88%, rgba(135,210,255,.14), transparent 45%),
+      var(--bg);
+  }
+  .app { display: flex; height: 100vh; }
+  /* 侧边栏 */
+  .side { width: 250px; background: rgba(255,255,255,.82); backdrop-filter: blur(8px);
+    border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+  .brand { padding: 20px 18px 12px; font-size: 18px; font-weight: 800;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    display: flex; align-items: center; gap: 8px; }
+  .brand .ico { width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--accent), var(--accent2)); display: grid; place-items: center;
+    font-size: 16px; box-shadow: var(--shadow); }
+  .brand small { display: block; font-size: 11px; color: var(--muted); font-weight: 500; margin-top: 3px;
+    -webkit-text-fill-color: var(--muted); }
+  .menu { flex: 1; overflow-y: auto; padding: 6px 8px; }
+  .grp { font-size: 11px; color: var(--muted); padding: 13px 10px 5px; letter-spacing: 1px; font-weight: 700; }
+  .item { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-radius: 12px;
+    cursor: pointer; font-size: 14px; color: var(--text); margin: 2px 0; font-weight: 500; }
+  .item:hover { background: var(--panel2); }
+  .item.active { background: linear-gradient(90deg, rgba(255,143,199,.22), rgba(179,155,255,.16));
+    box-shadow: inset 0 0 0 1px var(--border); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #eccfe0; flex-shrink: 0; }
+  .dot.filled { background: var(--ok); }
+  .dot.ai { background: var(--ai); }
+  .side-foot { padding: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 9px; }
+  /* 主区 */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .top { padding: 15px 24px; border-bottom: 1px solid var(--border); display: flex;
+    align-items: center; gap: 12px; background: rgba(255,255,255,.72); backdrop-filter: blur(8px); }
+  .top h2 { margin: 0; font-size: 17px; flex: 1; font-weight: 700; }
+  .tag { font-size: 11px; padding: 3px 9px; border-radius: 11px; background: var(--panel2); color: var(--muted); }
+  .tag.ai { background: rgba(179,155,255,.22); color: #8a6fe0; }
+  .body { flex: 1; overflow-y: auto; padding: 24px; }
+  /* 按钮 */
+  button { font-family: inherit; cursor: pointer; border: none; border-radius: 12px; font-size: 14px;
+    padding: 11px 18px; transition: .18s; font-weight: 600; }
+  .btn-primary { background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #fff;
+    box-shadow: var(--shadow); }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 26px rgba(255,143,199,.32); }
+  .btn-ghost { background: #fff; color: var(--text); border: 1.5px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+  /* 带动漫小图标的按钮：左侧叠一张圆形动漫图 */
+  .btn-anime { display: inline-flex; align-items: center; gap: 9px; padding-left: 9px; }
+  .btn-anime .ico { width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+    background-size: cover; background-position: center; box-shadow: 0 1px 4px rgba(0,0,0,.18);
+    border: 2px solid rgba(255,255,255,.85); }
+  textarea, input, select { width: 100%; background: #fff; color: var(--text);
+    border: 1.5px solid var(--border); border-radius: 12px; padding: 11px 13px; font-size: 14px;
+    font-family: inherit; resize: vertical; }
+  textarea:focus, input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,143,199,.15); }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 15px 0 6px; font-weight: 600; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .editor { min-height: 320px; line-height: 1.65; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+  .hint { font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.7; }
+  .box { margin-top: 18px; background: rgba(255,255,255,.7); border: 1.5px solid var(--border);
+    border-radius: 16px; padding: 16px; box-shadow: var(--shadow); }
+    .box h4 { margin: 0 0 6px; font-size: 14px; }
+    /* 美化模块四格 */
+    .bt-grid { display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 12px; }
+    @media (min-width: 720px) { .bt-grid { grid-template-columns: 1fr 1fr; } }
+    .bt-box { margin-top: 0; }
+    .bt-box h4 { display: flex; flex-direction: column; gap: 2px; }
+    .bt-desc { font-size: 11.5px; color: var(--muted); font-weight: 400; }
+    .bt-area { min-height: 150px; }
+    .preview-wrap { margin-top: 12px; }
+    /* 分块勾选卡片网格（图片按钮） */
+  .pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 12px; }
+  .pick { position: relative; border-radius: 16px; overflow: hidden; cursor: pointer;
+    border: 2.5px solid var(--border); background: #fff; box-shadow: var(--shadow); transition: .18s; }
+  .pick:hover { transform: translateY(-2px); }
+  .pick .ph { height: 84px; background-size: cover; background-position: center; }
+  .pick .cap { padding: 8px 10px; }
+  .pick .cap .t { font-size: 13.5px; font-weight: 700; }
+  .pick .cap .g { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .pick .mark { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(255,255,255,.85); display: grid; place-items: center; font-size: 13px; color: #cdb6c6;
+    box-shadow: 0 2px 6px rgba(0,0,0,.12); }
+  .pick.on { border-color: var(--accent); }
+  .pick.on .mark { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; }
+  .pick .badge { position: absolute; top: 8px; left: 8px; font-size: 10px; padding: 2px 7px; border-radius: 8px;
+    background: rgba(84,199,155,.92); color: #fff; font-weight: 700; display: none; }
+  .pick.done .badge { display: block; }
+  .pick-tools { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+  .pick-tools button { font-size: 12.5px; padding: 7px 12px; }
+  /* 遮罩/弹窗 */
+  .mask { position: fixed; inset: 0; background: rgba(120,80,110,.35); backdrop-filter: blur(3px); display: none;
+    align-items: center; justify-content: center; z-index: 50; }
+  .mask.show { display: flex; }
+  .modal { background: var(--bg2); border: 1.5px solid var(--border); border-radius: 20px;
+    padding: 24px; width: 600px; max-width: 92vw; max-height: 86vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(255,143,199,.3); }
+  .modal h3 { margin: 0 0 16px; }
+  .progress-list { margin-top: 14px; }
+  .progress-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 14px; }
+  .spin { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .check { color: var(--ok); } .xmark { color: var(--err); }
+  @media (max-width: 700px) {
+    .side { position: fixed; left: -250px; z-index: 40; height: 100%; transition: .2s; box-shadow: 0 0 40px rgba(0,0,0,.15); }
+    .side.open { left: 0; }
+    .menu-toggle { display: inline-flex !important; }
+    .body { padding: 16px; }
+  }
+  .menu-toggle { display: none; background: #fff; border: 1.5px solid var(--border);
+    color: var(--accent); border-radius: 10px; padding: 7px 11px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side">
+    <div class="brand"><span class="ico">🌸</span><span>Nova 角色卡工作室<small>一键生成 SillyTavern 角色卡</small></span></div>
+    <div class="menu" id="menu"></div>
+    <div class="side-foot">
+      <button class="btn-primary btn-anime" onclick="openGenAll()"><span class="ico" style="background-image:url('img/p7.jpg')"></span>一键生成</button>
+      <button class="btn-ghost btn-anime" onclick="openSettings()"><span class="ico" style="background-image:url('img/p8.jpg')"></span>设置</button>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="top">
+      <button class="menu-toggle" onclick="document.getElementById('side').classList.toggle('open')">☰</button>
+      <h2 id="pageTitle">总要求</h2>
+      <span class="tag" id="pageFmt"></span>
+      <span class="tag ai" id="aiTag" style="display:none">AI 已生成</span>
+    </div>
+    <div class="body" id="pageBody"></div>
+  </main>
+</div>
+
+<!-- 设置弹窗 -->
+<div class="mask" id="settingsMask">
+  <div class="modal">
+    <h3>⚙ 设置</h3>
+    <label>API 密钥（仅保存在本浏览器，不上传服务器存储）</label>
+    <input id="apiKey" type="password" placeholder="sk-..." />
+    <label>模型</label>
+    <div class="row" style="gap:8px">
+      <select id="model" style="flex:1"><option value="">先填密钥后点刷新拉取</option></select>
+      <button class="btn-ghost" type="button" onclick="loadModels()" id="modelRefreshBtn" style="white-space:nowrap">🔄 刷新</button>
+    </div>
+    <div class="hint" id="modelHint" style="margin-top:6px"></div>
+    <label>角色卡名称</label>
+    <input id="cardName" placeholder="例如：给白兰打赏" />
+    <div class="hint">接口固定为 https://blqs.bailan.shop/v1，密钥存在浏览器 localStorage。本站与小说工作室不共用密钥，需要在这里单独填一次。</div>
+    <div class="row" style="margin-top:18px; justify-content:flex-end">
+      <button class="btn-ghost" onclick="closeMask('settingsMask')">取消</button>
+      <button class="btn-primary btn-anime" onclick="saveSettings()"><span class="ico" style="background-image:url('img/p12.jpg')"></span>保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 一键生成弹窗 -->
+<div class="mask" id="genAllMask">
+  <div class="modal">
+    <h3>✨ 一键生成 / 重新生成</h3>
+    <label>作品总要求（角色、世界观、风格、玩法等，越详细越好）</label>
+    <textarea id="briefAll" style="min-height:110px" placeholder="例如：一个赛博朋克世界里的傲娇黑客少女，外冷内热，和{{user}}是青梅竹马……希望有好感度系统和状态栏。"></textarea>
+    <label>补充要求（可选，整体微调方向，作用到所有勾选分块）</label>
+    <textarea id="globalExtra" style="min-height:64px" placeholder="例如：语气再可爱一点；状态栏用粉色系。"></textarea>
+    <div class="hint" id="genPickHint">将生成你在「总要求」页勾选的分块。</div>
+    <div class="progress-list" id="progressList"></div>
+    <div class="row" style="margin-top:18px; justify-content:flex-end">
+      <button class="btn-ghost" onclick="closeMask('genAllMask')" id="genCloseBtn">关闭</button>
+      <button class="btn-ghost btn-anime" onclick="runGenAll()" id="genRegenBtn" title="保留已生成内容作为上下文，按补充要求整体重做"><span class="ico" style="background-image:url('img/p13.jpg')"></span>按补充要求重生成</button>
+      <button class="btn-primary btn-anime" onclick="runGenAll()" id="genStartBtn"><span class="ico" style="background-image:url('img/p14.jpg')"></span>开始生成勾选项</button>
+    </div>
+  </div>
+</div>
+
+<!-- 预览弹窗：在沙箱 iframe 里渲染 HTML -->
+<div class="mask" id="previewMask">
+  <div class="modal" style="max-width:680px; width:94%">
+    <h3 id="previewTitle">预览渲染</h3>
+      <div class="preview-wrap">
+        <iframe id="previewFrame" sandbox="allow-scripts" scrolling="auto" style="width:100%; height:300px; max-height:70vh; border:0; background:#fff; border-radius:12px; display:block"></iframe>
+      </div>
+    <div class="row" style="margin-top:14px; justify-content:flex-end">
+      <button class="btn-primary" onclick="closeMask('previewMask')">关闭预览</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const BRIEF_KEY = "__brief__";
+const GEXTRA_KEY = "__gextra__";
+const PICK_KEY = "nova_picks";
+let BLOCKS = [];
+let store = JSON.parse(localStorage.getItem("nova_store") || "{}");
+let picks = JSON.parse(localStorage.getItem(PICK_KEY) || "null"); // {blockKey:true}
+let current = BRIEF_KEY;
+const IMGS = Array.from({length:30},(_,i)=>`p${i+1}.jpg`);
+
+const cfg = () => ({
+  key: localStorage.getItem("nova_key") || "",
+  model: localStorage.getItem("nova_model") || "gemini-2.5-pro",
+  cardName: localStorage.getItem("nova_cardname") || "给白兰打赏",
+});
+// header 值只能是 Latin-1，密钥/模型可能含中文或全角字符，统一 encodeURIComponent
+function encHeader(v) { return encodeURIComponent(String(v == null ? "" : v)); }
+function saveStore() { localStorage.setItem("nova_store", JSON.stringify(store)); }
+function savePicks() { localStorage.setItem(PICK_KEY, JSON.stringify(picks)); }
+const briefVal = () => store[BRIEF_KEY]?.content || "";
+const gextraVal = () => store[GEXTRA_KEY]?.content || "";
+const imgFor = i => "img/" + IMGS[i % IMGS.length];
+
+async function init() {
+  try { BLOCKS = await fetch("/api/blocks").then(r => r.json()); }
+  catch { BLOCKS = []; }
+  // 默认勾选项：第一次进来全选
+  if (!picks) { picks = {}; BLOCKS.forEach(b => picks[b.key] = true); savePicks(); }
+  renderMenu();
+  selectPage(BRIEF_KEY);
+}
+
+function isPicked(key) { return !!picks[key]; }
+function selectedKeys() { return BLOCKS.filter(b => picks[b.key]).map(b => b.key); }
+
+function renderMenu() {
+  const groups = {};
+  BLOCKS.forEach(b => { (groups[b.group] = groups[b.group] || []).push(b); });
+  let html = `<div class="item ${current===BRIEF_KEY?'active':''}" onclick="selectPage('${BRIEF_KEY}')">
+    <span class="dot ${briefVal()?'filled':''}"></span>📋 总要求</div>`;
+  for (const [g, items] of Object.entries(groups)) {
+    html += `<div class="grp">${g}</div>`;
+    items.forEach(b => {
+      const s = store[b.key];
+      const dotCls = s?.content ? (s.ai ? 'ai' : 'filled') : '';
+      const off = picks[b.key] ? '' : 'style="opacity:.5"';
+      html += `<div class="item ${current===b.key?'active':''}" ${off} onclick="selectPage('${b.key}')">
+        <span class="dot ${dotCls}"></span>${b.label}</div>`;
+    });
+  }
+  html += `<div class="grp">导出</div>
+    <div class="item" onclick="packCard()"><span class="dot"></span>📦 打包导出 JSON</div>`;
+  document.getElementById("menu").innerHTML = html;
+}
+
+function selectPage(key) {
+  current = key;
+  document.getElementById("side").classList.remove("open");
+  if (key === BRIEF_KEY) return renderBrief();
+  const block = BLOCKS.find(b => b.key === key);
+  if (!block) return renderBrief();
+  document.getElementById("pageTitle").textContent = block.label;
+  document.getElementById("pageFmt").textContent = block.format;
+  const s = store[key] || {};
+  document.getElementById("aiTag").style.display = s.ai ? "" : "none";
+  if (key === "beautify") return renderBeautify();
+  // 状态栏等 HTML 分块，额外提供预览按钮
+  const isHtml = key === "status_bar" || /html/i.test(block.format || "");
+  const previewBtn = isHtml
+    ? `<button class="btn-ghost btn-anime" onclick="previewHtml(store['${key}']?.content || document.getElementById('ed').value)"><span class="ico" style="background-image:url('img/p12.jpg')"></span>预览渲染</button>`
+    : "";
+  document.getElementById("pageBody").innerHTML = `
+    <textarea class="editor" id="ed" placeholder="点下方「AI 生成本页」让 AI 填写，或手动输入。">${escapeHtml(s.content || "")}</textarea>
+    <div class="row" style="margin-top:12px">
+      <button class="btn-primary btn-anime" onclick="genBlock('${key}', false)" id="genBtn"><span class="ico" style="background-image:url('img/p9.jpg')"></span>AI 生成本页</button>
+      <button class="btn-ghost btn-anime" onclick="saveCurrent()"><span class="ico" style="background-image:url('img/p10.jpg')"></span>保存修改</button>
+      ${previewBtn}
+    </div>
+    <div class="box">
+      <h4>只改这一页</h4>
+      <label style="margin:6px 0 6px">向 AI 发送针对本页的修改要求，只重生成这一页</label>
+      <textarea id="blockExtra" placeholder="例如：性格再傲娇一点，加入她害怕打雷的设定。"></textarea>
+      <div class="row" style="justify-content:flex-end; margin-top:10px">
+        <button class="btn-ghost btn-anime" onclick="genBlock('${key}', true)"><span class="ico" style="background-image:url('img/p11.jpg')"></span>按要求只重生成本页</button>
+      </div>
+    </div>`;
+  renderMenu();
+}
+
+// 美化模块四部分定义
+const BEAUTIFY_PARTS = [
+  { key: "source", label: "开场白", desc: "带标签的开场白，会作为角色卡 first_mes，也是被正则提取渲染的数据源" },
+  { key: "html", label: "美化部分", desc: "HTML 渲染模板，用 $1 $2… 对应正则捕获组" },
+  { key: "regex", label: "正则部分", desc: "从源文件提取数据的正则表达式" },
+  { key: "worldbook", label: "世界书部分", desc: "给 AI 的输出格式 / 交互流程指令" },
+];
+
+// 读取/写入美化模块的某一部分
+function beautifyParts() { return (store.beautify && store.beautify.parts) || {}; }
+function setBeautifyPart(pk, val) {
+  store.beautify = store.beautify || { parts: {} };
+  store.beautify.parts = store.beautify.parts || {};
+  store.beautify.parts[pk] = val;
+  // 同步组装成四位一体文本，供导出
+  store.beautify.content = assembleBeautify(store.beautify.parts);
+  saveStore();
+}
+function assembleBeautify(parts) {
+  const titleMap = { source: "开场白", html: "美化部分", regex: "正则部分", worldbook: "世界书部分" };
+  return ["source","html","regex","worldbook"]
+    .filter(k => parts[k] && String(parts[k]).trim())
+    .map(k => `=== ${titleMap[k]} ===\n${String(parts[k]).trim()}`)
+    .join("\n\n");
+}
+// 把整段四位一体文本按 === 标题 === 拆回四格
+function parseBeautifyText(text) {
+  const parts = {};
+  if (!text) return parts;
+  const titleToKey = {
+    "开场白": "source", "源文件部分": "source", "源文件": "source",
+    "美化部分": "html", "美化": "html",
+    "正则部分": "regex", "正则": "regex",
+    "世界书部分": "worldbook", "世界书": "worldbook",
+  };
+  // 用 === 标题 === 作为分隔，捕获标题与其后内容
+  const re = /===\s*(.+?)\s*===\s*\n?([\s\S]*?)(?=\n===\s*.+?\s*===|$)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const key = titleToKey[m[1].trim()];
+    if (key) parts[key] = m[2].trim();
+  }
+  // 完全没匹配到标题时，整段塞进美化部分兜底
+  if (!Object.keys(parts).length) parts.html = String(text).trim();
+  return parts;
+}
+
+function renderBeautify() {
+  const parts = beautifyParts();
+  const boxes = BEAUTIFY_PARTS.map(p => {
+    const val = parts[p.key] || "";
+    const preview = p.key === "html"
+      ? `<button class="btn-ghost btn-anime" onclick="previewBeautify()"><span class="ico" style="background-image:url('img/p12.jpg')"></span>预览渲染</button>`
+      : "";
+    return `<div class="box bt-box">
+      <h4>${p.label}<span class="bt-desc">${p.desc}</span></h4>
+      <textarea class="editor bt-area" id="bt_${p.key}" placeholder="点「AI 生成」让 AI 填写，或手动输入。">${escapeHtml(val)}</textarea>
+      <div class="row" style="margin-top:8px; flex-wrap:wrap; gap:8px">
+        <button class="btn-primary btn-anime" id="btn_${p.key}" onclick="genBeautifyPart('${p.key}')"><span class="ico" style="background-image:url('img/p9.jpg')"></span>AI 生成</button>
+        <button class="btn-ghost btn-anime" onclick="saveBeautifyPart('${p.key}')"><span class="ico" style="background-image:url('img/p10.jpg')"></span>保存</button>
+        ${preview}
+      </div>
+    </div>`;
+  }).join("");
+  document.getElementById("pageBody").innerHTML = `
+    <div class="hint">这是 SillyTavern 的 HTML 美化模块，分四个部分，每部分都能<b>单独 AI 生成</b>。「美化部分」可点<b>预览渲染</b>看效果。四部分会自动合成完整模块用于导出。</div>
+    <div class="bt-grid">${boxes}</div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn-primary btn-anime" onclick="genAllBeautify()"><span class="ico" style="background-image:url('img/p15.jpg')"></span>按顺序生成全部四部分</button>
+    </div>`;
+  renderMenu();
+}
+
+function saveBeautifyPart(pk) {
+  const ta = document.getElementById("bt_" + pk);
+  if (!ta) return;
+  setBeautifyPart(pk, ta.value);
+  renderMenu(); toast("已保存");
+}
+
+// 收集角色卡里已生成的、与美化模块相关的内容，作为生成参照
+// 让美化模块围绕本卡的角色设定 / 状态栏 / MVU 变量 / 世界书来设计，而不是凭空发挥
+function beautifyCardContext() {
+  const ctx = {};
+  const keys = ["description", "personality", "scenario", "status_bar",
+    "mvu_schema", "mvu_init", "mvu_rules", "mvu_stages",
+    "background", "player", "dialogue", "interview"];
+  keys.forEach(k => {
+    if (store[k]?.content && String(store[k].content).trim()) ctx[k] = store[k].content;
+  });
+  return ctx;
+}
+
+async function genBeautifyPart(pk) {
+  const c = cfg();
+  if (!c.key) { openSettings(); return toast("请先填写 API 密钥"); }
+  // 先把当前四格的手动内容收进 parts，作为上下文
+  BEAUTIFY_PARTS.forEach(p => {
+    const ta = document.getElementById("bt_" + p.key);
+    if (ta) setBeautifyPart(p.key, ta.value);
+  });
+  const btn = document.getElementById("btn_" + pk);
+  if (btn) { btn.disabled = true; btn.textContent = "生成中…"; }
+  try {
+    const r = await fetch("/api/generate-beautify-part", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": encHeader(c.key), "x-model": encHeader(c.model) },
+      body: JSON.stringify({ partKey: pk, brief: briefVal(), globalExtra: gextraVal(), parts: beautifyParts(), cardContext: beautifyCardContext() }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "生成失败");
+    setBeautifyPart(pk, data.content);
+    store.beautify.ai = true; saveStore();
+    renderBeautify(); toast("已生成「" + (BEAUTIFY_PARTS.find(p=>p.key===pk)||{}).label + "」");
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "🤖 AI 生成"; }
+  }
+}
+
+async function genAllBeautify() {
+  for (const p of BEAUTIFY_PARTS) {
+    await genBeautifyPart(p.key);
+  }
+  toast("四部分已全部生成");
+}
+
+// 解析 /pattern/flags 形式的正则字符串
+function parseRegexStr(s) {
+  if (!s) return null;
+  const t = String(s).trim();
+  const m = t.match(/^\/([\s\S]*)\/([a-z]*)$/i);
+  try {
+    return m ? new RegExp(m[1], m[2]) : new RegExp(t);
+  } catch { return null; }
+}
+
+// 美化部分预览：用源文件+正则提取捕获组，填入 $1 $2… 后渲染
+function previewBeautify() {
+  const parts = beautifyParts();
+  // 先收一下当前编辑框最新值
+  BEAUTIFY_PARTS.forEach(p => {
+    const ta = document.getElementById("bt_" + p.key);
+    if (ta) parts[p.key] = ta.value;
+  });
+  let html = parts.html || "";
+  if (!html.trim()) return toast("「美化部分」还是空的，先生成或填写");
+  const source = parts.source || "";
+  const re = parseRegexStr(parts.regex);
+  if (re && source) {
+    const mm = source.match(re);
+    if (mm) {
+      // 用捕获组替换 $1 $2…（从大到小避免 $1 误吃 $10）
+      for (let i = mm.length - 1; i >= 1; i--) {
+        html = html.split("$" + i).join(mm[i] != null ? mm[i] : "");
+      }
+    }
+  }
+  previewHtml(html, "美化部分预览（已用源文件数据填充占位符）");
+}
+
+// 沙箱 iframe（无 allow-same-origin）父页读不到内容高度，
+// 改由 iframe 内部脚本量好高度后用 postMessage 发回，父页监听设置高度。
+let _previewMsgBound = false;
+function bindPreviewMsg() {
+  if (_previewMsgBound) return;
+  _previewMsgBound = true;
+  window.addEventListener("message", (e) => {
+    if (!e.data || e.data.__novaPreview !== true) return;
+    const frame = document.getElementById("previewFrame");
+    if (!frame) return;
+    const max = Math.round(window.innerHeight * 0.7);
+    const h = Math.min(Math.max(Number(e.data.height) + 8, 200), max);
+    if (h > 0) frame.style.height = h + "px";
+  });
+}
+
+// 通用 HTML 预览：在沙箱 iframe 里渲染
+function previewHtml(htmlStr, title) {
+  if (!htmlStr || !String(htmlStr).trim()) return toast("内容为空，无法预览");
+  document.getElementById("previewTitle").textContent = title || "预览渲染";
+  bindPreviewMsg();
+  const frame = document.getElementById("previewFrame");
+  frame.style.height = "300px";
+  const measure = `<script>(function(){function send(){var h=Math.max(document.body?document.body.scrollHeight:0,document.documentElement?document.documentElement.scrollHeight:0);parent.postMessage({__novaPreview:true,height:h},"*");}window.addEventListener("load",send);setTimeout(send,80);setTimeout(send,300);setTimeout(send,800);if(window.ResizeObserver){try{new ResizeObserver(send).observe(document.documentElement);}catch(e){}}})();<\/script>`;
+  frame.srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;}body{padding:10px;font-family:'Microsoft YaHei',sans-serif;box-sizing:border-box;}*{box-sizing:border-box;}</style></head><body>${htmlStr}${measure}</body></html>`;
+  openMask("previewMask");
+}
+
+function renderBrief() {
+  document.getElementById("pageTitle").textContent = "总要求";
+  document.getElementById("pageFmt").textContent = "";
+  document.getElementById("aiTag").style.display = "none";
+  let cards = "";
+  BLOCKS.forEach((b, i) => {
+    const s = store[b.key];
+    cards += `<div class="pick ${picks[b.key]?'on':''} ${s?.content?'done':''}" onclick="togglePick('${b.key}')">
+      <div class="badge">已生成</div>
+      <div class="mark">${picks[b.key]?'✓':''}</div>
+      <div class="ph" style="background-image:url('${imgFor(i)}')"></div>
+      <div class="cap"><div class="t">${b.label}</div><div class="g">${b.group}</div></div>
+    </div>`;
+  });
+  document.getElementById("pageBody").innerHTML = `
+    <div class="hint">第 1 步：写下总体设想。第 2 步：在下面<b>勾选你想要生成的部分</b>（比如只点「性格」，就只生成性格）。第 3 步：点左下角「一键生成」，AI 只生成勾选的分块。哪页不满意，进那页用「只改这一页」重做。</div>
+    <label>作品总要求</label>
+    <textarea class="editor" id="ed" style="min-height:160px" placeholder="描述角色、世界观、风格、玩法、想要的系统（如好感度/状态栏）……">${escapeHtml(briefVal())}</textarea>
+    <label>全局补充要求（可选，整体微调方向）</label>
+    <textarea id="gextra" style="min-height:70px" placeholder="例如：语气再可爱一点；状态栏用粉色系。">${escapeHtml(gextraVal())}</textarea>
+    <label style="margin-top:18px">选择要生成的部分（点图片卡片切换，✓ 为选中）</label>
+    <div class="pick-tools">
+      <button class="btn-ghost" onclick="pickAll(true)">全选</button>
+      <button class="btn-ghost" onclick="pickAll(false)">全不选</button>
+      <button class="btn-ghost" onclick="pickCore()">只要核心字段</button>
+    </div>
+    <div class="pick-grid">${cards}</div>
+    <div class="row" style="margin-top:18px">
+      <button class="btn-ghost" onclick="saveBrief()">💾 保存</button>
+      <button class="btn-primary btn-anime" onclick="startGenFromBrief()"><span class="ico" style="background-image:url('img/p15.jpg')"></span>生成勾选的部分</button>
+    </div>`;
+  renderMenu();
+}
+
+function togglePick(key) {
+  picks[key] = !picks[key]; savePicks();
+  if (current === BRIEF_KEY) renderBrief(); else renderMenu();
+}
+function pickAll(v) { BLOCKS.forEach(b => picks[b.key] = v); savePicks(); renderBrief(); }
+function pickCore() {
+  BLOCKS.forEach(b => picks[b.key] = (b.group === "核心字段"));
+  savePicks(); renderBrief();
+}
+
+function saveBrief() {
+  const ed = document.getElementById("ed");
+  const ge = document.getElementById("gextra");
+  if (ed) store[BRIEF_KEY] = { content: ed.value };
+  if (ge) store[GEXTRA_KEY] = { content: ge.value };
+  saveStore(); renderMenu(); toast("已保存");
+}
+
+function saveCurrent() {
+  const ed = document.getElementById("ed");
+  if (!ed) return;
+  store[current] = { ...(store[current]||{}), content: ed.value };
+  saveStore(); renderMenu(); toast("已保存");
+}
+
+function contextFor(key) {
+  const ctx = {};
+  ["description","personality","scenario","background","mvu_schema"].forEach(k => {
+    if (k !== key && store[k]?.content) ctx[k] = store[k].content;
+  });
+  return ctx;
+}
+
+async function genBlock(key, useExtra) {
+  const c = cfg();
+  if (!c.key) { openSettings(); return toast("请先填写 API 密钥"); }
+  const ed = document.getElementById("ed");
+  if (ed) store[key] = { ...(store[key]||{}), content: ed.value };
+  const blockExtra = useExtra ? (document.getElementById("blockExtra")?.value || "") : "";
+  const btn = document.getElementById("genBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "生成中…"; }
+  try {
+        const r = await fetch("/api/generate-block", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": encHeader(c.key), "x-model": encHeader(c.model) },
+      body: JSON.stringify({ blockKey: key, brief: briefVal(), globalExtra: gextraVal(), context: contextFor(key), blockExtra }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "生成失败");
+    store[key] = { content: data.content, ai: true };
+    saveStore(); selectPage(key); toast("已生成");
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "🤖 AI 生成本页"; }
+  }
+}
+
+// 总要求页直接点「生成勾选的部分」：保存→查密钥→开弹窗→自动开始
+function startGenFromBrief() {
+  saveBrief();
+  const c = cfg();
+  if (!c.key) { openSettings(); return toast("请先在「设置」里填写 API 密钥再生成"); }
+  if (!selectedKeys().length) return toast("请先在下面勾选要生成的分块");
+  openGenAll();
+  runGenAll();
+}
+
+function openGenAll() {
+  document.getElementById("briefAll").value = briefVal();
+  document.getElementById("globalExtra").value = gextraVal();
+  document.getElementById("progressList").innerHTML = "";
+  const n = selectedKeys().length;
+  document.getElementById("genPickHint").innerHTML = n
+    ? `将生成你勾选的 <b>${n}</b> 个分块。想改选择请回「总要求」页。`
+    : `你还没勾选任何分块，请回「总要求」页勾选。`;
+  document.getElementById("genStartBtn").style.display = "";
+  document.getElementById("genRegenBtn").style.display = "";
+  document.getElementById("genCloseBtn").textContent = "关闭";
+  closeMask(); openMask("genAllMask");
+}
+
+let genAllRunning = false;
+async function runGenAll() {
+  if (genAllRunning) { toast("正在生成中，请稍候…"); return; }
+  const c = cfg();
+  if (!c.key) { closeMask("genAllMask"); openSettings(); return toast("请先填写 API 密钥"); }
+  const onlyKeys = selectedKeys();
+  if (!onlyKeys.length) return toast("请先在「总要求」页勾选要生成的分块");
+  genAllRunning = true;
+  const brief = document.getElementById("briefAll").value.trim();
+  const globalExtra = document.getElementById("globalExtra").value.trim();
+  store[BRIEF_KEY] = { content: brief };
+  store[GEXTRA_KEY] = { content: globalExtra };
+  saveStore();
+  const list = document.getElementById("progressList");
+  list.innerHTML = "";
+  document.getElementById("genStartBtn").style.display = "none";
+  document.getElementById("genRegenBtn").style.display = "none";
+  const rows = {};
+
+  try {
+    let resp;
+    try {
+      resp = await fetch("/api/generate-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": encHeader(c.key), "x-model": encHeader(c.model) },
+        body: JSON.stringify({ brief, globalExtra, onlyKeys }),
+      });
+    } catch (e) { toast("连接失败：" + e.message); resetGenBtns(); return; }
+
+    if (!resp.ok) {
+      let msg = "生成失败";
+      try { msg = (await resp.json()).error || msg; } catch {}
+      toast(msg); resetGenBtns(); return;
+    }
+
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split("\n\n");
+      buf = parts.pop();
+      for (const p of parts) {
+        const line = p.replace(/^data:\s*/, "").trim();
+        if (!line) continue;
+        let ev; try { ev = JSON.parse(line); } catch { continue; }
+        handleGenEvent(ev, rows, list);
+      }
+    }
+    document.getElementById("genCloseBtn").textContent = "完成";
+    document.getElementById("genRegenBtn").style.display = "";
+    renderMenu();
+    toast("生成完成");
+  } finally {
+    genAllRunning = false;
+  }
+}
+
+function resetGenBtns() {
+  document.getElementById("genStartBtn").style.display = "";
+  document.getElementById("genRegenBtn").style.display = "";
+}
+
+function handleGenEvent(ev, rows, list) {
+  if (ev.type === "progress" && ev.status === "start") {
+    const id = "pg_" + ev.blockKey;
+    if (!rows[id]) {
+      const div = document.createElement("div");
+      div.className = "progress-item"; div.id = id;
+      div.innerHTML = `<span class="spin"></span><span>${ev.label}</span>`;
+      list.appendChild(div); rows[id] = div;
+    }
+  } else if (ev.type === "block") {
+    if (ev.blockKey === "beautify") {
+      // 美化模块：把整段四位一体文本拆进四格 parts
+      const parts = parseBeautifyText(ev.content);
+      store.beautify = { parts, content: assembleBeautify(parts), ai: true };
+      saveStore();
+    } else {
+      store[ev.blockKey] = { content: ev.content, ai: true }; saveStore();
+    }
+    const div = rows["pg_" + ev.blockKey];
+    if (div) div.innerHTML = `<span class="check">✓</span><span>${labelOf(ev.blockKey)}</span>`;
+  } else if (ev.type === "error") {
+    const div = rows["pg_" + ev.blockKey];
+    if (div) div.innerHTML = `<span class="xmark">✗</span><span>${labelOf(ev.blockKey)}：${escapeHtml(String(ev.error).slice(0,50))}</span>`;
+  }
+}
+const labelOf = k => (BLOCKS.find(b=>b.key===k)||{}).label || k;
+
+async function packCard() {
+  const c = cfg();
+  const name = c.cardName || prompt("请输入角色卡名称", "给白兰打赏");
+  if (!name) return;
+  localStorage.setItem("nova_cardname", name);
+  const blocks = {};
+  Object.keys(store).forEach(k => {
+    if (k !== BRIEF_KEY && k !== GEXTRA_KEY && store[k]?.content) blocks[k] = store[k].content;
+  });
+  // 美化模块启用时：拆成结构化四部分交给后端
+  // - 开场白(source) → 角色卡 first_mes（带标签，能被美化正则渲染）
+  // - 正则(regex)+美化(html) → regex_script
+  // - 世界书(worldbook) → @D 深度世界书条目
+  const btParts = store.beautify?.parts;
+  if (btParts && (btParts.source || btParts.html || btParts.regex || btParts.worldbook)) {
+    if (btParts.source && String(btParts.source).trim()) {
+      blocks.first_mes = String(btParts.source).trim();
+    }
+    blocks.beautify = {
+      source: (btParts.source || "").trim(),
+      html: (btParts.html || "").trim(),
+      regex: (btParts.regex || "").trim(),
+      worldbook: (btParts.worldbook || "").trim(),
+    };
+  } else {
+    delete blocks.beautify;
+  }
+  if (!Object.keys(blocks).length) return toast("还没有任何内容可打包");
+  try {
+    const r = await fetch("/api/pack", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, blocks, meta: { creator: "Nova", world: name } }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "打包失败");
+    const blob = new Blob([JSON.stringify(data.card, null, 4)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = data.filename; a.click();
+    URL.revokeObjectURL(url);
+    toast("已导出 " + data.filename);
+  } catch (e) { toast(e.message); }
+}
+
+async function loadModels() {
+  const c = cfg();
+  const keyInput = document.getElementById("apiKey").value.trim() || c.key;
+  const sel = document.getElementById("model");
+  const hint = document.getElementById("modelHint");
+  const btn = document.getElementById("modelRefreshBtn");
+  if (!keyInput) { hint.textContent = "请先填写 API 密钥再拉取模型。"; return; }
+  if (btn) { btn.disabled = true; btn.textContent = "拉取中…"; }
+  hint.textContent = "正在拉取模型列表…";
+  try {
+    const r = await fetch("/api/models", { headers: { "x-api-key": encHeader(keyInput) } });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "拉取失败");
+    const models = data.models || [];
+    const cur = c.model;
+    sel.innerHTML = models.length
+      ? models.map(m => `<option value="${escapeHtml(m)}"${m===cur?" selected":""}>${escapeHtml(m)}</option>`).join("")
+      : `<option value="">（接口未返回任何模型）</option>`;
+    if (cur && !models.includes(cur) && models.length) {
+      sel.insertAdjacentHTML("afterbegin", `<option value="${escapeHtml(cur)}" selected>${escapeHtml(cur)}（当前）</option>`);
+    }
+    hint.textContent = models.length ? `共 ${models.length} 个模型，已自动选中。` : "";
+  } catch (e) {
+    hint.textContent = "拉取失败：" + e.message;
+    if (c.model) sel.innerHTML = `<option value="${escapeHtml(c.model)}" selected>${escapeHtml(c.model)}</option>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "🔄 刷新"; }
+  }
+}
+
+function openSettings() {
+  document.getElementById("apiKey").value = cfg().key;
+  const sel = document.getElementById("model");
+  sel.innerHTML = `<option value="${escapeHtml(cfg().model)}" selected>${escapeHtml(cfg().model)}</option>`;
+  document.getElementById("cardName").value = cfg().cardName;
+  openMask("settingsMask");
+}
+function saveSettings() {
+  localStorage.setItem("nova_key", document.getElementById("apiKey").value.trim());
+  localStorage.setItem("nova_model", document.getElementById("model").value.trim() || "gemini-2.5-pro");
+  // 下拉框取值（select 的 value 已是选中模型）
+  localStorage.setItem("nova_cardname", document.getElementById("cardName").value.trim());
+  closeMask("settingsMask"); toast("设置已保存");
+}
+
+function openMask(id){ document.getElementById(id).classList.add("show"); }
+function closeMask(id){ if(id) document.getElementById(id).classList.remove("show");
+  else document.querySelectorAll(".mask").forEach(m=>m.classList.remove("show")); }
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'"'}[c])); }
+let toastTimer;
+function toast(msg){
+  let t = document.getElementById("__toast");
+  if(!t){ t=document.createElement("div"); t.id="__toast";
+    t.style.cssText="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#fff;color:#4a3a44;padding:11px 22px;border-radius:14px;border:1.5px solid #f3d9ea;box-shadow:0 8px 24px rgba(255,143,199,.25);z-index:99;font-size:14px;max-width:90vw;text-align:center";
+    document.body.appendChild(t); }
+  t.textContent = msg; t.style.opacity = "1";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ t.style.opacity="0"; t.style.transition="opacity .4s"; }, 3000);
+}
+
+init();
+</script>
+</body>
+</html>

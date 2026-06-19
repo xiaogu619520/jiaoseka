@@ -1,0 +1,13 @@
+{
+  "name": "nova-web",
+  "version": "1.0.0",
+  "description": "一键生成 SillyTavern 角色卡的网页工具",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
