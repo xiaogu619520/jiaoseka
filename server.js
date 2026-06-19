@@ -9,7 +9,15 @@ const app = express();
 app.use(express.json({ limit: "10mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
-const UPSTREAM = "https://blqs.bailan.shop/v1";
+// 上游 API 基址（OpenAI 兼容）。优先级：请求自带 > 环境变量 UPSTREAM_BASE > 默认值。
+// 默认值保留原有地址，便于现网零改动继续运行。
+const DEFAULT_UPSTREAM = process.env.UPSTREAM_BASE || "https://blqs.bailan.shop/v1";
+
+// 规范化上游基址：去掉首尾空白和结尾多余的斜杠，缺省补回默认值。
+function normalizeBase(v) {
+  const s = String(v || "").trim().replace(/\/+$/, "");
+  return s || DEFAULT_UPSTREAM;
+}
 
 // 安全解码：header 值可能被前端 encodeURIComponent 过，非编码值原样返回
 function safeDecode(v) {
@@ -31,7 +39,11 @@ function getCreds(req) {
     "";
   const model =
     safeDecode(req.headers["x-model"]) || req.body?.model || "gemini-2.5-pro";
-  return { key: String(key).trim(), model: String(model).trim() };
+  // 上游基址：允许请求自带（header x-base-url 或 body.baseUrl），否则用默认/环境变量
+  const base = normalizeBase(
+    safeDecode(req.headers["x-base-url"]) || req.body?.baseUrl || ""
+  );
+  return { key: String(key).trim(), model: String(model).trim(), base };
 }
 
 // 把上游错误码转成对用户友好的提示
@@ -52,12 +64,13 @@ function friendlyError(status, raw) {
 }
 
 // 调用上游 LLM（OpenAI 兼容 /chat/completions）
-async function callLLM({ key, model, system, user }) {
+async function callLLM({ key, model, system, user, base }) {
+  const upstream = normalizeBase(base);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 120000);
   let resp;
   try {
-    resp = await fetch(`${UPSTREAM}/chat/completions`, {
+    resp = await fetch(`${upstream}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -152,7 +165,7 @@ app.get("/api/blocks", (req, res) => {
 
 // 接口：生成单个分块
 app.post("/api/generate-block", async (req, res) => {
-  const { key, model } = getCreds(req);
+  const { key, model, base } = getCreds(req);
   if (!key) return res.status(400).json({ error: "未配置 API 密钥，请在「设置」里填写后再试。" });
   const { blockKey, brief = "", globalExtra = "", context = {}, blockExtra = "" } = req.body || {};
   if (!BLOCK_MAP[blockKey]) return res.status(400).json({ error: "未知的分块类型" });
@@ -160,6 +173,7 @@ app.post("/api/generate-block", async (req, res) => {
     const content = await callLLM({
       key,
       model,
+      base,
       system: SYSTEM_BASE,
       user: buildBlockPrompt({ blockKey, brief, globalExtra, context, blockExtra }),
     });
@@ -176,7 +190,7 @@ app.get("/api/beautify-parts", (req, res) => {
 
 // 接口：单独生成美化模块的某一部分（把其它已生成部分作为上下文，保持一致）
 app.post("/api/generate-beautify-part", async (req, res) => {
-  const { key, model } = getCreds(req);
+  const { key, model, base } = getCreds(req);
   if (!key) return res.status(400).json({ error: "未配置 API 密钥，请在「设置」里填写后再试。" });
   const { partKey, brief = "", globalExtra = "", parts = {}, blockExtra = "", cardContext = {} } = req.body || {};
   const part = BEAUTIFY_PART_MAP[partKey];
@@ -213,7 +227,7 @@ app.post("/api/generate-beautify-part", async (req, res) => {
     if (blockExtra && blockExtra.trim()) {
       p += `\n# 针对本部分的修改要求（最高优先级）\n${blockExtra.trim()}\n`;
     }
-    const content = await callLLM({ key, model, system: SYSTEM_BASE, user: p });
+    const content = await callLLM({ key, model, base, system: SYSTEM_BASE, user: p });
     res.json({ partKey, content: stripFence(content) });
   } catch (e) {
     res.status(502).json({ error: String(e.message || e) });
@@ -222,7 +236,7 @@ app.post("/api/generate-beautify-part", async (req, res) => {
 
 // 接口：一键全量生成（流式返回进度，逐块生成并把已生成内容作为上下文）
 app.post("/api/generate-all", async (req, res) => {
-  const { key, model } = getCreds(req);
+  const { key, model, base } = getCreds(req);
   if (!key) return res.status(400).json({ error: "未配置 API 密钥，请在「设置」里填写后再试。" });
   const {
     brief = "",
@@ -253,6 +267,7 @@ app.post("/api/generate-all", async (req, res) => {
         const content = await callLLM({
           key,
           model,
+          base,
           system: SYSTEM_BASE,
           user: buildBlockPrompt({ blockKey, brief, globalExtra, context: result, blockExtra: "" }),
         });
@@ -319,12 +334,12 @@ app.post("/api/pack", (req, res) => {
 
 // 接口：拉取上游可用模型列表（用用户密钥代理）
 app.get("/api/models", async (req, res) => {
-  const { key } = getCreds(req);
+  const { key, base } = getCreds(req);
   if (!key) return res.status(400).json({ error: "未配置 API 密钥，请先在「设置」里填写。" });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20000);
   try {
-    const r = await fetch(`${UPSTREAM}/models`, {
+    const r = await fetch(`${base}/models`, {
       headers: { Authorization: `Bearer ${key}` },
       signal: controller.signal,
     });

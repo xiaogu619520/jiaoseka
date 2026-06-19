@@ -77,21 +77,38 @@ docker run -d -p 5180:8090 --name nova-web nova-web
 | GET  | `/api/models` | 用用户密钥拉取上游可用模型列表 |
 | GET  | `/api/health` | 健康检查 |
 
-### 鉴权说明
+### 鉴权与上游说明
 
-所有需要调用大模型的接口都从请求里读取密钥与模型，优先级如下：
+所有需要调用大模型的接口都从请求里读取密钥、模型与上游地址，优先级如下：
 
 - 密钥：`x-api-key` 头 → `Authorization: Bearer` 头 → 请求体 `apiKey`
 - 模型：`x-model` 头 → 请求体 `model`（默认 `gemini-2.5-pro`）
+- 上游地址：`x-base-url` 头 → 请求体 `baseUrl` → 环境变量 `UPSTREAM_BASE` → 内置默认值
 
 密钥由前端从浏览器本地存储带上，服务端仅作转发代理，不做持久化。
 
 ## 配置
 
 - `PORT`：服务监听端口，默认 `8090`
-- 上游地址在 `server.js` 中的 `UPSTREAM` 常量配置，需为 OpenAI 兼容接口
+- `UPSTREAM_BASE`：上游 API 基址（OpenAI 兼容），默认 `https://blqs.bailan.shop/v1`。
+  也可以在请求里通过 `x-base-url` 头或请求体 `baseUrl` 字段按次覆盖，从而对接任意 OpenAI 兼容服务，不再写死单一接口。
+
+示例：用环境变量切换上游
+
+```bash
+UPSTREAM_BASE=https://api.openai.com/v1 npm start
+```
+
+示例：按请求覆盖上游（curl）
+
+```bash
+curl http://localhost:8090/api/models \
+  -H "x-api-key: sk-xxxx" \
+  -H "x-base-url: https://your-endpoint.example.com/v1"
+```
 
 ## 注意事项
 
 - 请使用你自己的、有效的 API 密钥；密钥仅保存在浏览器本地，不会上传到代码仓库。
 - 上游接口需兼容 OpenAI 的 `/chat/completions` 与 `/models` 格式。
+- 自定义上游时，`base` 末尾的多余斜杠会被自动去除，路径会拼接为 `<base>/chat/completions` 与 `<base>/models`。
